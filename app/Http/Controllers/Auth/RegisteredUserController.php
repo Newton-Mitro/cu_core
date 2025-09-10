@@ -20,7 +20,11 @@ class RegisteredUserController extends Controller
      */
     public function create(): Response
     {
-        return Inertia::render('auth/register');
+        // Optionally pass available branches and roles to the view
+        return Inertia::render('auth/register', [
+            // 'branches' => Branch::all(['id', 'name']),
+            // 'roles'    => ['TELLER', 'OPS', 'MANAGER', 'ADMIN'],
+        ]);
     }
 
     /**
@@ -32,14 +36,18 @@ class RegisteredUserController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            'email' => 'required|string|lowercase|email|max:255|unique:' . User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'branch_id' => 'required|exists:branches,id',
+            'role' => 'required|in:TELLER,OPS,MANAGER,ADMIN',
         ]);
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'branch_id' => $request->branch_id,
+            'role' => $request->role,
         ]);
 
         event(new Registered($user));
