@@ -1304,7 +1304,19 @@ CREATE TABLE cash_reconciliations (
 
 ## Journals / General Ledger (GL)
 
+### ER Diagram
+
+```mermaid
+erDiagram
+    GL_ACCOUNTS ||--o{ JOURNAL_LINES : "used_in"
+    ACCOUNTS ||--o{ JOURNAL_LINES : "linked_to"
+    JOURNAL_ENTRIES ||--o{ JOURNAL_LINES : "contains"
+    BRANCHES ||--o{ JOURNAL_ENTRIES : "belongs_to"
+    USERS ||--o{ JOURNAL_ENTRIES : "created_by"
+```
+
 ```sql
+-- General Ledger Accounts
 CREATE TABLE gl_accounts (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(50) UNIQUE NOT NULL,
@@ -1315,10 +1327,11 @@ CREATE TABLE gl_accounts (
     FOREIGN KEY (parent_id) REFERENCES gl_accounts(id)
 );
 
+-- Voucher / Journal Entry
 CREATE TABLE journal_entries (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    tx_code VARCHAR(50),
-    tx_ref VARCHAR(50),
+    tx_code VARCHAR(50),         -- e.g., 'PAY_VOUCHER', 'RCPT_VOUCHER', 'JOURNAL_VOUCHER'
+    tx_ref VARCHAR(50),          -- optional reference number
     posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     branch_id BIGINT UNSIGNED,
     user_id BIGINT UNSIGNED,
@@ -1327,11 +1340,12 @@ CREATE TABLE journal_entries (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+-- Voucher Lines
 CREATE TABLE journal_lines (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     entry_id BIGINT UNSIGNED NOT NULL,
     gl_account_id BIGINT UNSIGNED NOT NULL,
-    account_id BIGINT UNSIGNED,
+    account_id BIGINT UNSIGNED,       -- optional, link to customer/account
     debit DECIMAL(18,2) DEFAULT 0,
     credit DECIMAL(18,2) DEFAULT 0,
     CHECK ((debit = 0 AND credit > 0) OR (credit = 0 AND debit > 0)),
@@ -1339,8 +1353,6 @@ CREATE TABLE journal_lines (
     FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (account_id) REFERENCES accounts(id)
 );
-
-
 ```
 
 ## Payments / Schedules / Interest / Charges
