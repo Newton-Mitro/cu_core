@@ -1,4 +1,12 @@
+- vendor and vendor account management
+- fixed asset management
+- employee management
+- leave and attendance management
+- payroll management
+- seperate db for company? (Laravel Multi-Tenant Setup)
+
 ```sql
+-- Start of Branch Management
 CREATE TABLE branches (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(20) UNIQUE NOT NULL,
@@ -7,7 +15,9 @@ CREATE TABLE branches (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+-- End of Branch Management
 
+-- Start of User roles and permission Management
 CREATE TABLE roles (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
@@ -53,7 +63,9 @@ CREATE TABLE user_roles (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
 );
+-- End of User roles and permission Management
 
+-- Start of Customer Management
 CREATE TABLE customers (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     customer_no VARCHAR(50) UNIQUE NOT NULL,
@@ -122,7 +134,6 @@ CREATE TABLE customer_family_relations (
     INDEX idx_relation_type (relation_type)
 );
 
--- Stores uploaded signature images
 CREATE TABLE customer_signatures (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     customer_id BIGINT UNSIGNED NOT NULL,
@@ -134,7 +145,7 @@ CREATE TABLE customer_signatures (
 
 CREATE TABLE online_users (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-     customer_id BIGINT UNSIGNED NOT NULL UNIQUE,
+    customer_id BIGINT UNSIGNED NOT NULL UNIQUE,
     username VARCHAR(100) UNIQUE NOT NULL,
     email VARCHAR(150) UNIQUE,
     phone VARCHAR(20) UNIQUE,
@@ -145,8 +156,9 @@ CREATE TABLE online_users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id)
 );
+-- End of Customer Management
 
--- General Ledger Accounts
+-- Start of General Ledger Management
 CREATE TABLE gl_accounts (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(50) UNIQUE NOT NULL,
@@ -157,7 +169,6 @@ CREATE TABLE gl_accounts (
     FOREIGN KEY (parent_id) REFERENCES gl_accounts(id)
 );
 
--- Voucher / Journal Entry
 CREATE TABLE journal_entries (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     tx_code VARCHAR(50),         -- e.g., 'PAY_VOUCHER', 'RCPT_VOUCHER', 'JOURNAL_VOUCHER'
@@ -170,7 +181,6 @@ CREATE TABLE journal_entries (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Voucher Lines
 CREATE TABLE journal_lines (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     entry_id BIGINT UNSIGNED NOT NULL,
@@ -183,7 +193,9 @@ CREATE TABLE journal_lines (
     FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (account_id) REFERENCES accounts(id)
 );
+-- End of General Ledger Management
 
+-- Start of Product Management
 CREATE TABLE products (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     type ENUM('SAVINGS','SHARE','RECURRING_DEPOSIT','FIXED_DEPOSIT','INSURANCE','LOAN') NOT NULL,
@@ -232,6 +244,7 @@ CREATE TABLE insurance_products (
     premium_cycle ENUM('MONTHLY','QUARTERLY','ANNUAL') DEFAULT 'MONTHLY',
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
+-- End of Product Management
 
 -- Start of Account Management
 CREATE TABLE accounts (
@@ -274,7 +287,9 @@ CREATE TABLE account_introducers (
 CREATE TABLE account_nominees (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     account_id BIGINT UNSIGNED NOT NULL,
-    nominee_id BIGINT UNSIGNED NOT NULL,
+    nominee_id BIGINT UNSIGNED,
+    name VARCHAR(100) NOT NULL,
+    relation VARCHAR(100) NOT NULL,
     share_percentage DECIMAL(5,2) DEFAULT 0,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
     FOREIGN KEY (nominee_id) REFERENCES customers(id)
@@ -356,7 +371,7 @@ CREATE TABLE insurance_policies (
     beneficiary VARCHAR(150),
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
--- TODO: For deposit, loan, and insurance
+
 CREATE TABLE schedules (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     account_id BIGINT UNSIGNED NOT NULL,
