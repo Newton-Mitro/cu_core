@@ -7,7 +7,6 @@ CREATE TABLE share_policies (
     min_opening_balance DECIMAL(18,2) DEFAULT 0.00,
     min_balance DECIMAL(18,2) DEFAULT 0.00,
     dividend_rate DECIMAL(5,2) DEFAULT 0.00,      -- Annual dividend %
-    protection_fee DECIMAL(18,2) DEFAULT 0.00,    -- Yearly share protection fee
     dividend_frequency ENUM('QUARTERLY','ANNUAL') DEFAULT 'ANNUAL',
     withdrawal_limit INT DEFAULT NULL,            -- Optional: # withdrawals per period
     status ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
