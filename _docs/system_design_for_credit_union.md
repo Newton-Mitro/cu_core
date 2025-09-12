@@ -569,7 +569,7 @@ CREATE TABLE dividend_periods (
 -- ========================================
 CREATE TABLE member_dividends (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    member_id BIGINT UNSIGNED NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
     dividend_period_id BIGINT UNSIGNED NOT NULL,
     amount DECIMAL(18,2) NOT NULL,
     status ENUM('PENDING','PAID') DEFAULT 'PENDING',
@@ -577,7 +577,7 @@ CREATE TABLE member_dividends (
     remarks TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (member_id) REFERENCES members(id),
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
     FOREIGN KEY (dividend_period_id) REFERENCES dividend_periods(id)
 );
 
@@ -602,7 +602,7 @@ CREATE TABLE dividend_payments (
 CREATE TABLE loan_repayment_rebates (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     loan_id BIGINT UNSIGNED NOT NULL,
-    member_id BIGINT UNSIGNED NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
     rebate_type ENUM('EARLY_REPAYMENT','PROMOTIONAL') NOT NULL,
     amount DECIMAL(18,2) NOT NULL,
     applied_date DATE NOT NULL,
@@ -610,7 +610,7 @@ CREATE TABLE loan_repayment_rebates (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (loan_id) REFERENCES loans(id),
-    FOREIGN KEY (member_id) REFERENCES members(id)
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
 );
 
 ```

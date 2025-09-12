@@ -10,7 +10,7 @@ class OnlineUser extends Authenticatable
     use HasFactory;
 
     protected $fillable = [
-        'member_id',
+        'customer_id',
         'username',
         'email',
         'phone',
@@ -30,6 +30,6 @@ class OnlineUser extends Authenticatable
 
     public function member()
     {
-        return $this->belongsTo(Customer::class, 'member_id'); // assuming 'members' is 'customers'
+        return $this->belongsTo(Customer::class, 'customer_id'); // assuming 'members' is 'customers'
     }
 }

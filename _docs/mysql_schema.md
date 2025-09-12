@@ -65,6 +65,50 @@ CREATE TABLE user_roles (
 );
 -- End of User roles and permission Management
 
+-- Start of General Ledger Management
+CREATE TABLE gl_accounts (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    type ENUM('ASSET','LIABILITY','EQUITY','INCOME','EXPENSE') NOT NULL,
+    is_leaf BOOLEAN DEFAULT TRUE,
+    parent_id BIGINT UNSIGNED,
+    FOREIGN KEY (parent_id) REFERENCES gl_accounts(id)
+);
+
+CREATE TABLE journal_entries (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    tx_code VARCHAR(50),         -- e.g., 'PAY_VOUCHER', 'RCPT_VOUCHER', 'JOURNAL_VOUCHER'
+    tx_ref VARCHAR(50),          -- optional reference number
+    posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    branch_id BIGINT UNSIGNED,
+    user_id BIGINT UNSIGNED,
+    memo TEXT,
+    FOREIGN KEY (branch_id) REFERENCES branches(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE journal_lines (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    entry_id BIGINT UNSIGNED NOT NULL,
+    gl_account_id BIGINT UNSIGNED NOT NULL,
+    account_id BIGINT UNSIGNED,       -- optional, link to customer/account
+    cash_account_id BIGINT UNSIGNED,       -- optional, link to cash/account
+    -- account_id BIGINT UNSIGNED,       -- optional, link to vendor/account
+    debit DECIMAL(18,2) DEFAULT 0,
+    credit DECIMAL(18,2) DEFAULT 0,
+    CHECK ((debit = 0 AND credit > 0) OR (credit = 0 AND debit > 0)),
+    FOREIGN KEY (entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
+    FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id),
+    FOREIGN KEY (account_id) REFERENCES accounts(id)
+    FOREIGN KEY (cash_account_id) REFERENCES cash_accounts(id),
+);
+-- End of General Ledger Management
+
+-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+-- Start of Customer Sub-ledger
+-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 -- Start of Customer Management
 CREATE TABLE customers (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -158,45 +202,8 @@ CREATE TABLE online_users (
 );
 -- End of Customer Management
 
--- Start of General Ledger Management
-CREATE TABLE gl_accounts (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    code VARCHAR(50) UNIQUE NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    type ENUM('ASSET','LIABILITY','EQUITY','INCOME','EXPENSE') NOT NULL,
-    is_leaf BOOLEAN DEFAULT TRUE,
-    parent_id BIGINT UNSIGNED,
-    FOREIGN KEY (parent_id) REFERENCES gl_accounts(id)
-);
-
-CREATE TABLE journal_entries (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    tx_code VARCHAR(50),         -- e.g., 'PAY_VOUCHER', 'RCPT_VOUCHER', 'JOURNAL_VOUCHER'
-    tx_ref VARCHAR(50),          -- optional reference number
-    posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    branch_id BIGINT UNSIGNED,
-    user_id BIGINT UNSIGNED,
-    memo TEXT,
-    FOREIGN KEY (branch_id) REFERENCES branches(id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
-
-CREATE TABLE journal_lines (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    entry_id BIGINT UNSIGNED NOT NULL,
-    gl_account_id BIGINT UNSIGNED NOT NULL,
-    account_id BIGINT UNSIGNED,       -- optional, link to customer/account
-    debit DECIMAL(18,2) DEFAULT 0,
-    credit DECIMAL(18,2) DEFAULT 0,
-    CHECK ((debit = 0 AND credit > 0) OR (credit = 0 AND debit > 0)),
-    FOREIGN KEY (entry_id) REFERENCES journal_entries(id) ON DELETE CASCADE,
-    FOREIGN KEY (gl_account_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (account_id) REFERENCES accounts(id)
-);
--- End of General Ledger Management
-
 -- Start of Product Management
-CREATE TABLE products (
+CREATE TABLE product_policies (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     type ENUM('SAVINGS','SHARE','RECURRING_DEPOSIT','FIXED_DEPOSIT','INSURANCE','LOAN') NOT NULL,
     code VARCHAR(50) UNIQUE NOT NULL,   -- unique product code
@@ -207,8 +214,8 @@ CREATE TABLE products (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-CREATE TABLE deposit_products (
-    product_id BIGINT UNSIGNED PRIMARY KEY,
+CREATE TABLE deposit_policies (
+    product_policy_id BIGINT UNSIGNED PRIMARY KEY,
     gl_control_id BIGINT UNSIGNED NOT NULL,     -- liability control account for deposits
     gl_interest_id BIGINT UNSIGNED NOT NULL,     -- GL for interest income
     gl_fees_income_id BIGINT UNSIGNED NOT NULL,  -- GL for fees/penalty/processing/etc.
@@ -217,11 +224,11 @@ CREATE TABLE deposit_products (
     min_opening_amount DECIMAL(18,2) DEFAULT 0,
     lock_in_days INT DEFAULT 0,
     penalty_break_bp INT DEFAULT 0,             -- penalty rate for premature withdrawal
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    FOREIGN KEY (product_policy_id) REFERENCES product_policies(id) ON DELETE CASCADE
 );
 
-CREATE TABLE loan_products (
-    product_id BIGINT UNSIGNED PRIMARY KEY,
+CREATE TABLE loan_policies (
+    product_policy_id BIGINT UNSIGNED PRIMARY KEY,
     gl_principal_id BIGINT UNSIGNED NOT NULL,   -- loan principal ledger
     gl_interest_id BIGINT UNSIGNED NOT NULL,     -- GL for interest income
     gl_fees_income_id BIGINT UNSIGNED NOT NULL,  -- GL for fees/penalty/processing/etc.
@@ -231,18 +238,18 @@ CREATE TABLE loan_products (
     max_tenor_months INT NOT NULL,
     collateral_required BOOLEAN DEFAULT FALSE,
     ltv_percent INT NULL,                       -- Loan-to-Value ratio
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    FOREIGN KEY (product_policy_id) REFERENCES product_policies(id) ON DELETE CASCADE
 );
 
-CREATE TABLE insurance_products (
-    product_id BIGINT UNSIGNED PRIMARY KEY,
+CREATE TABLE insurance_policies (
+    product_policy_id BIGINT UNSIGNED PRIMARY KEY,
     gl_principal_id BIGINT UNSIGNED NOT NULL,   -- loan principal ledger
     gl_fees_income_id BIGINT UNSIGNED NULL,  -- GL for fees/penalty/processing/etc.
     coverage_type ENUM('LIFE','HEALTH','PROPERTY','OTHER') DEFAULT 'LIFE',
     min_premium DECIMAL(18,2) NOT NULL,
     max_premium DECIMAL(18,2) NOT NULL,
     premium_cycle ENUM('MONTHLY','QUARTERLY','ANNUAL') DEFAULT 'MONTHLY',
-    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+    FOREIGN KEY (product_policy_id) REFERENCES product_policies(id) ON DELETE CASCADE
 );
 -- End of Product Management
 
@@ -251,7 +258,7 @@ CREATE TABLE accounts (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     account_no VARCHAR(50) UNIQUE NOT NULL,         -- core account number
     customer_id BIGINT UNSIGNED NOT NULL,             -- who owns the account
-    product_id BIGINT UNSIGNED NOT NULL,            -- FK to product definition
+    product_policy_id BIGINT UNSIGNED NOT NULL,            -- FK to product definition
     branch_id BIGINT UNSIGNED NOT NULL,             -- branch opened
     type ENUM('SAVINGS','RD','FD','SHARE','LOAN','INSURANCE') NOT NULL,
     status ENUM('ACTIVE','PENDING','CLOSED','SUSPENDED') DEFAULT 'ACTIVE',
@@ -260,7 +267,7 @@ CREATE TABLE accounts (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (customer_id) REFERENCES customers(id),
-    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (product_policy_id) REFERENCES product_policies(id),
     FOREIGN KEY (branch_id) REFERENCES branches(id)
 );
 
@@ -360,9 +367,8 @@ CREATE TABLE loan_accounts (
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
-CREATE TABLE insurance_policies (
+CREATE TABLE insurance_accounts (
     account_id BIGINT UNSIGNED PRIMARY KEY,
-    policy_no VARCHAR(50) UNIQUE NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     premium_amount DECIMAL(18,2) NOT NULL,
@@ -450,7 +456,7 @@ CREATE TABLE dividend_periods (
 
 CREATE TABLE member_dividends (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    member_id BIGINT UNSIGNED NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
     dividend_period_id BIGINT UNSIGNED NOT NULL,
     amount DECIMAL(18,2) NOT NULL,
     status ENUM('PENDING','PAID') DEFAULT 'PENDING',
@@ -458,7 +464,7 @@ CREATE TABLE member_dividends (
     remarks TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (member_id) REFERENCES members(id),
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
     FOREIGN KEY (dividend_period_id) REFERENCES dividend_periods(id)
 );
 
@@ -477,7 +483,7 @@ CREATE TABLE dividend_payments (
 CREATE TABLE loan_repayment_rebates (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     loan_id BIGINT UNSIGNED NOT NULL,
-    member_id BIGINT UNSIGNED NOT NULL,
+    customer_id BIGINT UNSIGNED NOT NULL,
     rebate_type ENUM('EARLY_REPAYMENT','PROMOTIONAL') NOT NULL,
     amount DECIMAL(18,2) NOT NULL,
     applied_date DATE NOT NULL,
@@ -485,7 +491,7 @@ CREATE TABLE loan_repayment_rebates (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (loan_id) REFERENCES loans(id),
-    FOREIGN KEY (member_id) REFERENCES members(id)
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
 );
 -- End of Account Management
 
@@ -493,7 +499,7 @@ CREATE TABLE loan_repayment_rebates (
 CREATE TABLE loan_applications (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     customer_id BIGINT UNSIGNED NOT NULL,
-    product_id BIGINT UNSIGNED NOT NULL,
+    product_policy_id BIGINT UNSIGNED NOT NULL,
     account_id BIGINT UNSIGNED NULL, -- created later after approval
     loan_type ENUM('GENERAL','DEPOSIT','SECURED') DEFAULT 'GENERAL',
     amount_requested DECIMAL(18,2) NOT NULL,
@@ -503,7 +509,7 @@ CREATE TABLE loan_applications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id),
-    FOREIGN KEY (product_id) REFERENCES products(id),
+    FOREIGN KEY (product_policy_id) REFERENCES product_policies(id),
     FOREIGN KEY (account_id) REFERENCES accounts(id)
 );
 
@@ -617,6 +623,11 @@ CREATE TABLE loan_application_status_history (
     FOREIGN KEY (changed_by) REFERENCES users(id)
 );
 -- End of Loan Application, Approval and Disbursement
+
+-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+-- End of Customer Sub-ledger
+-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 
 -- Start of Cash Account and Flow Management
 CREATE TABLE cash_accounts (
