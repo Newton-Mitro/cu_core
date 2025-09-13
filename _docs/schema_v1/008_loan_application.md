@@ -19,21 +19,26 @@ CREATE TABLE loan_applications (
 CREATE TABLE loan_collaterals (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     loan_application_id BIGINT UNSIGNED NOT NULL,
+    loan_account_id BIGINT UNSIGNED NULL, -- created later after approval
     deposit_account_id BIGINT UNSIGNED,
     collateral_type ENUM('SURETY','LEAN','ASSET','PROPERTY','BLANK_CHEQUE') NOT NULL,
     reference VARCHAR(255),
     value DECIMAL(18,2) NOT NULL,
     description VARCHAR(255),
+    status ENUM('PLEDGED','RELEASED','SEIZED') DEFAULT 'PLEDGED',
     FOREIGN KEY (loan_application_id) REFERENCES loan_applications(id) ON DELETE CASCADE,
     FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id)
+    FOREIGN KEY (loan_account_id) REFERENCES loan_accounts(id)
 );
 
 CREATE TABLE loan_guarantors (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     loan_application_id BIGINT UNSIGNED NOT NULL,
+    loan_account_id BIGINT UNSIGNED NULL, -- created later after approval
     customer_id BIGINT UNSIGNED NOT NULL,
     FOREIGN KEY (loan_application_id) REFERENCES loan_applications(id) ON DELETE CASCADE,
     FOREIGN KEY (customer_id) REFERENCES customers(id)
+    FOREIGN KEY (loan_account_id) REFERENCES loan_accounts(id)
 );
 
 CREATE TABLE loan_applicant_work_details (

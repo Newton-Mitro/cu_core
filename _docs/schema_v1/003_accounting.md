@@ -12,7 +12,7 @@ CREATE TABLE gl_accounts (
 CREATE TABLE journal_entries (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     tx_code VARCHAR(50),         -- e.g., 'PAY_VOUCHER', 'RCPT_VOUCHER', 'JOURNAL_VOUCHER'
-    tx_ref VARCHAR(50),          -- optional reference number
+    tx_ref VARCHAR(50),          -- e.g., cheque_no, voucher_ref, payrooll_batch_ref
     posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     branch_id BIGINT UNSIGNED,
     user_id BIGINT UNSIGNED,
