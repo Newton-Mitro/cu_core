@@ -28,14 +28,27 @@ CREATE TABLE customers (
 CREATE TABLE customer_addresses (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     customer_id BIGINT UNSIGNED NOT NULL,
-    line1 VARCHAR(255) NOT NULL,
-    line2 VARCHAR(255),
-    city VARCHAR(100) NOT NULL,
-    state VARCHAR(100),
-    postal_code VARCHAR(20),
-    country_code CHAR(2) NOT NULL DEFAULT 'BD',  -- ISO 3166-1 alpha-2
+
+    -- Primary address lines
+    line1 VARCHAR(255) NOT NULL,              -- House/road/holding info
+    line2 VARCHAR(255),                       -- Optional landmark or extra info
+
+    -- Administrative levels for Bangladesh
+    division VARCHAR(100) NOT NULL,           -- e.g., Dhaka, Chattogram
+    district VARCHAR(100) NOT NULL,           -- e.g., Gazipur, Cumilla
+    upazila VARCHAR(100),                     -- e.g., Kaliakair, Daudkandi
+    union_ward VARCHAR(100),                  -- e.g., Ward-5, Union-3
+    village_locality VARCHAR(150),            -- e.g., Village name or mohalla
+
+    postal_code VARCHAR(20),                  -- e.g., 1700
+    country_code CHAR(2) NOT NULL DEFAULT 'BD', -- Always BD for Bangladesh
+
     type ENUM('CURRENT','PERMANENT','MAILING','WORK','REGISTERED','OTHER')
         NOT NULL DEFAULT 'CURRENT',
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 );
 
