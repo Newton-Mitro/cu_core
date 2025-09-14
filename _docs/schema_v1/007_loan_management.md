@@ -1,29 +1,43 @@
 ```sql
--- Loan Policies (unchanged from previous, with GL accounts)
 CREATE TABLE loan_policies (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     code VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(150) NOT NULL,
     description TEXT,
     type ENUM('TERM_LOAN','OVERDRAFT','MORTGAGE','PERSONAL') NOT NULL,
+
+    -- Open
     min_amount DECIMAL(18,2) DEFAULT 0.00,
     max_amount DECIMAL(18,2) DEFAULT 0.00,
-    tenure_months INT NOT NULL,
-    repayment_frequency ENUM('MONTHLY','QUARTERLY','WEEKLY') DEFAULT 'MONTHLY',
+    eligibility_check BOOLEAN DEFAULT TRUE,
+
+    -- Interest
     interest_rate DECIMAL(5,2) NOT NULL,
     interest_method ENUM('FLAT','REDUCING','COMPOUND') DEFAULT 'REDUCING',
     interest_accrual BOOLEAN DEFAULT TRUE,
     interest_eligibility_check BOOLEAN DEFAULT TRUE,
-    late_payment_fee DECIMAL(18,2) DEFAULT 0.00,
-    fine_rate DECIMAL(5,2) DEFAULT 0.00,
-    default_status ENUM('ACTIVE','DEFAULTED') DEFAULT 'ACTIVE',
-    gl_control_ledger_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_receivable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_income_id BIGINT UNSIGNED DEFAULT NULL,
+
+    -- Installment / Repayment
+    tenure_months INT NOT NULL,
+    repayment_frequency ENUM('MONTHLY','QUARTERLY','WEEKLY') DEFAULT 'MONTHLY',
+    installment_type ENUM('PRINCIPAL_INTEREST','PRINCIPAL_ONLY','INTEREST_ONLY') DEFAULT 'PRINCIPAL_INTEREST',
+    installment_calculation_method ENUM('FLAT','REDUCING','COMPOUND') DEFAULT 'REDUCING',
+
+    -- Penalty / Fine
+    late_payment_fee DECIMAL(18,2) DEFAULT 0.00,
+    fine_rate DECIMAL(5,2) DEFAULT 0.00,
+    fine_calculation_method ENUM('FIXED','PERCENTAGE','TIERED') DEFAULT 'FIXED',
+    fine_max_cap DECIMAL(18,2) DEFAULT NULL,
+    first_reminder_days INT DEFAULT 0,
+    second_reminder_days INT DEFAULT 0,
+    final_reminder_days INT DEFAULT 0,
     gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+
     status ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (gl_control_ledger_id) REFERENCES gl_accounts(id),
+
     FOREIGN KEY (gl_interest_receivable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_income_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
@@ -164,6 +178,8 @@ CREATE TABLE loan_interest_accruals (
     FOREIGN KEY (gl_interest_receivable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_income_id) REFERENCES gl_accounts(id)
 );
+
+-- rebate provision
 
 ```
 
