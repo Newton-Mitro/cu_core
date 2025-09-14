@@ -58,7 +58,7 @@ CREATE TABLE deposit_policies (
     gl_deposit_payable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_payable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_expense_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_deposit_fee_id BIGINT UNSIGNED DEFAULT NULL,
 
     status ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -67,7 +67,7 @@ CREATE TABLE deposit_policies (
     FOREIGN KEY (gl_deposit_payable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_payable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_expense_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_deposit_fee_id) REFERENCES gl_accounts(id)
 );
 
 CREATE TABLE deposit_policy_tenures (
@@ -140,9 +140,23 @@ CREATE TABLE deposit_account_nominees (
     FOREIGN KEY (nominee_customer_id) REFERENCES customers(id)
 );
 
+CREATE TABLE deposit_account_schedules (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    deposit_account_id BIGINT UNSIGNED NOT NULL,
+    sequence_no INT NOT NULL,
+    due_date DATE NOT NULL,
+    amount_due DECIMAL(18,2) NOT NULL,
+    status ENUM('PENDING','PAID','LATE') DEFAULT 'PENDING',
+    paid_date DATE DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id)
+);
+
 CREATE TABLE deposit_account_transactions (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     deposit_account_id BIGINT UNSIGNED NOT NULL,
+    related_schedule_id BIGINT UNSIGNED DEFAULT NULL,
     txn_date DATE NOT NULL,
     description VARCHAR(255),
     debit DECIMAL(18,2) DEFAULT 0.00,
@@ -166,22 +180,10 @@ CREATE TABLE deposit_account_transactions (
     FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id),
     FOREIGN KEY (deposit_policy_id) REFERENCES deposit_policies(id),
     FOREIGN KEY (interest_accrual_id) REFERENCES deposit_interest_provisions(id),
+    FOREIGN KEY (related_schedule_id) REFERENCES deposit_account_schedules(id),
     FOREIGN KEY (deposit_account_fee_id) REFERENCES deposit_account_fees(id),
     FOREIGN KEY (gl_control_account_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (reversal_of_txn_id) REFERENCES deposit_account_transactions(id)
-);
-
-CREATE TABLE deposit_account_schedules (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    deposit_account_id BIGINT UNSIGNED NOT NULL,
-    sequence_no INT NOT NULL,
-    due_date DATE NOT NULL,
-    amount_due DECIMAL(18,2) NOT NULL,
-    status ENUM('PENDING','PAID','LATE') DEFAULT 'PENDING',
-    paid_date DATE DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id)
 );
 
 CREATE TABLE deposit_account_fees (
@@ -202,14 +204,14 @@ CREATE TABLE deposit_account_fees (
     penalty_amount DECIMAL(18,2) NOT NULL,
     settled BOOLEAN DEFAULT FALSE,
     interest_accrual_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_deposit_fee_id BIGINT UNSIGNED DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id),
     FOREIGN KEY (related_schedule_id) REFERENCES deposit_account_schedules(id),
     FOREIGN KEY (deposit_policy_id) REFERENCES deposit_policies(id),
     FOREIGN KEY (interest_accrual_id) REFERENCES deposit_interest_provisions(id),
-    FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_deposit_fee_id) REFERENCES gl_accounts(id)
 );
 
 CREATE TABLE deposit_interest_provisions (
@@ -221,6 +223,7 @@ CREATE TABLE deposit_interest_provisions (
     provision_amount DECIMAL(18,2) NOT NULL,
     eligible BOOLEAN DEFAULT TRUE,
     recognized BOOLEAN DEFAULT FALSE,
+    provision_type ENUM('REGULAR','BONUS','ADJUSTMENT') DEFAULT 'REGULAR',
     gl_interest_payable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_expense_id BIGINT UNSIGNED DEFAULT NULL,
     notes VARCHAR(255),
@@ -238,75 +241,99 @@ CREATE TABLE deposit_interest_provisions (
 
 ```mermaid
 erDiagram
-    DEPOSIT_POLICIES ||--o{ DEPOSIT_POLICY_TENURES : has
-    DEPOSIT_POLICY_TENURES ||--o{ DEPOSIT_POLICY_AGE_RULES : has
+    %% Deposit Policies & Rules
+    DEPOSIT_POLICIES ||--o{ DEPOSIT_POLICY_TENURES : "has multiple"
+    DEPOSIT_POLICY_TENURES ||--o{ DEPOSIT_POLICY_AGE_RULES : "defines age-based rules"
 
-    DEPOSIT_POLICIES ||--o{ DEPOSIT_ACCOUNTS : governs
-    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_HOLDERS : has
-    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_INTRODUCERS : has
-    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_NOMINEES : has
-    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_SIGNATORIES : has
-    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_TRANSACTIONS : records
-    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_SCHEDULES : schedules
-    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_FEES : penalties
-    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_INTEREST_PROVISIONS : provisions
+    %% Deposit Accounts
+    DEPOSIT_POLICIES ||--o{ DEPOSIT_ACCOUNTS : "governs"
+    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_HOLDERS : "has"
+    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_INTRODUCERS : "introduced by"
+    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_SIGNATORIES : "signed by"
+    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_NOMINEES : "has nominees"
+    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_TRANSACTIONS : "records"
+    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_SCHEDULES : "schedules"
+    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_FEES : "incurs fees"
+    DEPOSIT_ACCOUNTS ||--o{ DEPOSIT_INTEREST_PROVISIONS : "provisions interest"
 
-    DEPOSIT_POLICY_TENURES ||--o{ DEPOSIT_INTEREST_PROVISIONS : accrues
-    DEPOSIT_POLICY_TENURES ||--o{ DEPOSIT_POLICY_AGE_RULES : defines
+    %% Linking Tenures to Interest Provisions
+    DEPOSIT_POLICY_TENURES ||--o{ DEPOSIT_INTEREST_PROVISIONS : "accrues"
+    DEPOSIT_POLICY_TENURES ||--o{ DEPOSIT_POLICY_AGE_RULES : "defines"
 
-    CUSTOMERS ||--o{ DEPOSIT_ACCOUNT_HOLDERS : holds
-    CUSTOMERS ||--o{ DEPOSIT_ACCOUNT_INTRODUCERS : introduces
-    CUSTOMERS ||--o{ DEPOSIT_ACCOUNT_NOMINEES : nominated
-    CUSTOMERS ||--o{ DEPOSIT_ACCOUNT_SIGNATORIES : signs
+    %% Customers
+    CUSTOMERS ||--o{ DEPOSIT_ACCOUNT_HOLDERS : "holds"
+    CUSTOMERS ||--o{ DEPOSIT_ACCOUNT_INTRODUCERS : "introduces"
+    CUSTOMERS ||--o{ DEPOSIT_ACCOUNT_NOMINEES : "nominated"
+    CUSTOMERS ||--o{ DEPOSIT_ACCOUNT_SIGNATORIES : "signs"
 
-    GL_ACCOUNTS ||--o{ DEPOSIT_POLICIES : links
-    GL_ACCOUNTS ||--o{ DEPOSIT_INTEREST_PROVISIONS : paid_to
-    GL_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_TRANSACTIONS : linked
-    GL_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_FEES : linked
+    %% GL Accounts
+    GL_ACCOUNTS ||--o{ DEPOSIT_POLICIES : "linked"
+    GL_ACCOUNTS ||--o{ DEPOSIT_INTEREST_PROVISIONS : "paid_to"
+    GL_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_TRANSACTIONS : "linked"
+    GL_ACCOUNTS ||--o{ DEPOSIT_ACCOUNT_FEES : "linked"
 ```
 
 ## Deposit Account Flow
 
 ```mermaid
 flowchart TD
+    %% Customer onboarding
     A[Customer Onboarding] --> B[Select Deposit Policy]
     B --> C[Create Deposit Account]
-    C --> D[Assign Account Holders / Signatories]
-    D --> E[Link Introducer and Nominees]
-    E --> F[Initial Deposit Transaction / Advance Deposit]
 
-    F --> G{Account Type?}
-    G -->|Recurring Deposit| H[Generate Deposit Schedules]
-    G -->|Fixed Deposit| I[Set Maturity Date and Tenure]
-    G -->|Savings/Special| J[Enable Withdrawals and Deposits]
+    %% Assign stakeholders
+    C --> D[Assign Account Holders]
+    D --> D1[Assign Primary / Joint Holders]
+    C --> E[Assign Signatories]
+    C --> F[Assign Introducer]
+    C --> G[Assign Nominees]
 
-    H --> K[Track Payments Against Schedules]
-    I --> L[Calculate Interest Provisions Periodically]
-    J --> L
+    %% Initial deposit
+    C --> H[Initial Deposit Transaction]
 
-    K --> M[Apply Deposit Fees]
-    M --> M1{Fee Type?}
-    M1 -->|LATE_PAYMENT| N[Post Late Payment Fee Transaction]
-    M1 -->|INACTIVITY| N1[Post Dormant/Inactivity Fee Transaction]
-    M1 -->|MAINTENANCE| N2[Post Maintenance Fee Transaction]
-    M1 -->|OTHER| N3[Post Miscellaneous Fee Transaction]
+    %% Account type handling
+    H --> I{Account Type?}
+    I -->|Recurring Deposit| J[Generate Deposit Schedules]
+    I -->|Fixed Deposit| K[Set Maturity Date and Tenure]
+    I -->|Savings/Special| L[Enable Deposits & Withdrawals]
 
-    L --> O{Eligible for Interest?}
-    O -->|Yes| P[Provision Interest in Deposit Interest Provisions]
-    O -->|No| P1[Skip Interest Posting]
+    %% Payment tracking
+    J --> M[Track Payments Against Schedules]
 
-    P --> Q[Post Recognized Interest to Deposit Account Transactions]
-    P1 --> Q
+    %% Fee application
+    M --> N[Check Applicable Fees]
+    N --> N1[LATE_PAYMENT Fee]
+    N --> N2[INACTIVITY Fee]
+    N --> N3[MAINTENANCE Fee]
+    N --> N4[OTHER Fees]
+    N1 --> O[Post Fee Transaction to Account]
+    N2 --> O
+    N3 --> O
+    N4 --> O
 
-    N --> Q
-    N1 --> Q
-    N2 --> Q
-    N3 --> Q
+    %% Interest processing
+    K --> P[Calculate Interest Provisions Periodically]
+    L --> P
+    P --> Q{Eligible for Interest?}
+    Q -->|Yes| R[Provision Interest in Deposit Interest Provisions]
+    Q -->|No| R1[Skip Interest Posting]
+    R --> S[Post Recognized Interest to Account Transactions]
+    R1 --> S
 
-    Q --> R[Update Deposit Account Current Balance]
-    R --> S{Account Closed or Matured?}
-    S -->|Yes| T[Close Account, Post Final Transactions, Transfer Balance]
-    S -->|No| F
+    %% Update balance and maturity
+    O --> S
+    S --> T[Update Deposit Account Current Balance]
+    T --> U{Account Closed or Matured?}
+    U -->|Yes| V[Close Account, Post Final Transactions, Transfer Balance]
+    U -->|No| H
 
-    T --> U[Generate Reports, Audit Logs, and GL Journal Entries]
+    %% Reporting & GL
+    V --> W[Generate Reports, Audit Logs, and GL Journal Entries]
+
+    %% Stakeholder roles integration
+    D1 -.-> H
+    E -.-> H
+    F -.-> H
+    G -.-> H
+
 ```

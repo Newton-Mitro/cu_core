@@ -24,6 +24,7 @@ CREATE TABLE loan_policies (
     repayment_frequency ENUM('MONTHLY','QUARTERLY','WEEKLY') DEFAULT 'MONTHLY',
     installment_type ENUM('PRINCIPAL_INTEREST','PRINCIPAL_ONLY','INTEREST_ONLY') DEFAULT 'PRINCIPAL_INTEREST',
     installment_calculation_method ENUM('FLAT','REDUCING','COMPOUND') DEFAULT 'REDUCING',
+    gl_loan_receivable_id BIGINT UNSIGNED DEFAULT NULL,
 
     -- Penalty / Fine
     late_payment_fee DECIMAL(18,2) DEFAULT 0.00,
@@ -33,14 +34,15 @@ CREATE TABLE loan_policies (
     first_reminder_days INT DEFAULT 0,
     second_reminder_days INT DEFAULT 0,
     final_reminder_days INT DEFAULT 0,
-    gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_loan_fee_id BIGINT UNSIGNED DEFAULT NULL,
 
     status ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (gl_interest_receivable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_income_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_loan_receivable_id) REFERENCES gl_accounts(id),
+    FOREIGN KEY (gl_loan_fee_id) REFERENCES gl_accounts(id)
 );
 
 -- Loan Accounts
@@ -57,18 +59,18 @@ CREATE TABLE loan_accounts (
     status ENUM('ACTIVE','CLOSED','DEFAULTED') DEFAULT 'ACTIVE',
     current_balance DECIMAL(18,2) DEFAULT 0.00,
     protection_scheme_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_control_ledger_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_loan_receivable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_receivable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_income_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_loan_fee_id BIGINT UNSIGNED DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id),
     FOREIGN KEY (policy_id) REFERENCES loan_policies(id),
     FOREIGN KEY (protection_scheme_id) REFERENCES loan_protection_schemes(id),
-    FOREIGN KEY (gl_control_ledger_id) REFERENCES gl_accounts(id),
+    FOREIGN KEY (gl_loan_receivable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_receivable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_income_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_loan_fee_id) REFERENCES gl_accounts(id)
 );
 
 -- Loan Protection Schemes
@@ -83,11 +85,11 @@ CREATE TABLE loan_protection_schemes (
     renewal_fee DECIMAL(18,2) DEFAULT 0.00,
     status ENUM('ACTIVE','EXPIRED','LAPSED') DEFAULT 'ACTIVE',
     gl_protection_scheme_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_loan_fee_id BIGINT UNSIGNED DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (loan_account_id) REFERENCES loan_accounts(id),
     FOREIGN KEY (gl_protection_scheme_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_loan_fee_id) REFERENCES gl_accounts(id)
 );
 
 -- Loan Protection Transactions
@@ -102,12 +104,12 @@ CREATE TABLE loan_protection_transactions (
     balance DECIMAL(18,2) DEFAULT 0.00,
     reference_no VARCHAR(50),
     gl_cash_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_loan_fee_id BIGINT UNSIGNED DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (loan_account_id) REFERENCES loan_accounts(id),
     FOREIGN KEY (protection_scheme_id) REFERENCES loan_protection_schemes(id),
     FOREIGN KEY (gl_cash_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_loan_fee_id) REFERENCES gl_accounts(id)
 );
 
 -- Loan Schedules
@@ -138,13 +140,13 @@ CREATE TABLE loan_payments (
     gl_control_account_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_receivable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_income_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_loan_fee_id BIGINT UNSIGNED DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (loan_account_id) REFERENCES loan_accounts(id),
     FOREIGN KEY (gl_control_account_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_receivable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_income_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_loan_fee_id) REFERENCES gl_accounts(id)
 );
 
 -- Loan Penalties
@@ -157,11 +159,11 @@ CREATE TABLE loan_penalties (
     penalty_amount DECIMAL(18,2) NOT NULL,
     received_as_cash BOOLEAN DEFAULT TRUE,
     settled BOOLEAN DEFAULT TRUE,
-    gl_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_loan_fee_id BIGINT UNSIGNED DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (loan_account_id) REFERENCES loan_accounts(id),
     FOREIGN KEY (related_schedule_id) REFERENCES loan_schedules(id),
-    FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_loan_fee_id) REFERENCES gl_accounts(id)
 );
 
 -- Loan Interest Accruals
@@ -209,18 +211,18 @@ erDiagram
     LOAN_SCHEDULES ||--o{ LOAN_PENALTIES : related_to
 
     %% GL Accounts
-    GL_ACCOUNTS ||--o{ LOAN_POLICIES : gl_control_ledger_id
+    GL_ACCOUNTS ||--o{ LOAN_POLICIES : gl_loan_receivable_id
     GL_ACCOUNTS ||--o{ LOAN_POLICIES : gl_interest_receivable_id
     GL_ACCOUNTS ||--o{ LOAN_POLICIES : gl_interest_income_id
-    GL_ACCOUNTS ||--o{ LOAN_POLICIES : gl_fee_id
-    GL_ACCOUNTS ||--o{ LOAN_ACCOUNTS : gl_control_ledger_id
+    GL_ACCOUNTS ||--o{ LOAN_POLICIES : gl_loan_fee_id
+    GL_ACCOUNTS ||--o{ LOAN_ACCOUNTS : gl_loan_receivable_id
     GL_ACCOUNTS ||--o{ LOAN_ACCOUNTS : gl_interest_receivable_id
     GL_ACCOUNTS ||--o{ LOAN_ACCOUNTS : gl_interest_income_id
-    GL_ACCOUNTS ||--o{ LOAN_ACCOUNTS : gl_fee_id
+    GL_ACCOUNTS ||--o{ LOAN_ACCOUNTS : gl_loan_fee_id
     GL_ACCOUNTS ||--o{ LOAN_PROTECTION_SCHEMES : gl_protection_scheme_id
-    GL_ACCOUNTS ||--o{ LOAN_PROTECTION_SCHEMES : gl_fee_id
+    GL_ACCOUNTS ||--o{ LOAN_PROTECTION_SCHEMES : gl_loan_fee_id
     GL_ACCOUNTS ||--o{ LOAN_PROTECTION_TRANSACTIONS : gl_cash_id
-    GL_ACCOUNTS ||--o{ LOAN_PROTECTION_TRANSACTIONS : gl_fee_id
+    GL_ACCOUNTS ||--o{ LOAN_PROTECTION_TRANSACTIONS : gl_loan_fee_id
 ```
 
 ## Loan Lifecycle Flow
