@@ -84,13 +84,13 @@ CREATE TABLE deposit_policy_age_rules (
 
 CREATE TABLE deposit_accounts (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    account_no VARCHAR(50) UNIQUE NOT NULL,       -- Unique deposit account number
+    account_no VARCHAR(50) UNIQUE NOT NULL,         -- Unique deposit account number
     account_name VARCHAR(100) UNIQUE NOT NULL,
-    policy_id BIGINT UNSIGNED NOT NULL,           -- FK to deposit_policies
+    policy_id BIGINT UNSIGNED NOT NULL,             -- FK to deposit_policies
     opened_date DATE NOT NULL,
-    maturity_date DATE DEFAULT NULL,              -- For FD or RD
-    tenure_months INT DEFAULT NULL,               -- Useful for RD
-    installment_amount DECIMAL(18,2) DEFAULT NULL,-- RD monthly installment
+    maturity_date DATE DEFAULT NULL,                -- For FD or RD
+    tenure_months INT DEFAULT NULL,                 -- Useful for RD
+    installment_amount DECIMAL(18,2) DEFAULT NULL,  -- RD monthly installment
     status ENUM('OPEN','FROZEN','CLOSED') DEFAULT 'OPEN',
     current_balance DECIMAL(18,2) DEFAULT 0.00,
     last_interest_posted DATE,
@@ -154,15 +154,15 @@ CREATE TABLE deposit_account_transactions (
     -- New fields
     deposit_policy_id BIGINT UNSIGNED DEFAULT NULL,
     interest_accrual_id BIGINT UNSIGNED DEFAULT NULL,
-    fee_id BIGINT UNSIGNED DEFAULT NULL,
+    deposit_account_fee_id BIGINT UNSIGNED DEFAULT NULL,
     gl_control_account_id BIGINT UNSIGNED DEFAULT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id),
     FOREIGN KEY (deposit_policy_id) REFERENCES deposit_policies(id),
-    FOREIGN KEY (interest_accrual_id) REFERENCES deposit_interest_accruals(id),
-    FOREIGN KEY (fee_id) REFERENCES deposit_account_penalties(id),            -- Optional table for fee records
+    FOREIGN KEY (interest_accrual_id) REFERENCES deposit_interest_provisions(id),
+    FOREIGN KEY (deposit_account_fee_id) REFERENCES deposit_account_fees(id),            -- Optional table for fee records
     FOREIGN KEY (gl_control_account_id) REFERENCES gl_accounts(id)
 );
 
@@ -178,7 +178,7 @@ CREATE TABLE deposit_account_schedules (
     FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id)
 );
 
-CREATE TABLE deposit_account_penalties (
+CREATE TABLE deposit_account_fees (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     deposit_account_id BIGINT UNSIGNED NOT NULL,     -- FK to deposit_accounts
@@ -198,11 +198,11 @@ CREATE TABLE deposit_account_penalties (
     FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id),
     FOREIGN KEY (related_schedule_id) REFERENCES deposit_account_schedules(id),
     FOREIGN KEY (deposit_policy_id) REFERENCES deposit_policies(id),
-    FOREIGN KEY (interest_accrual_id) REFERENCES deposit_interest_accruals(id),
+    FOREIGN KEY (interest_accrual_id) REFERENCES deposit_interest_provisions(id),
     FOREIGN KEY (gl_fee_id) REFERENCES gl_accounts(id)
 );
 
-CREATE TABLE deposit_interest_accruals (
+CREATE TABLE deposit_interest_provisions (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
 
     deposit_account_id BIGINT UNSIGNED NOT NULL,  -- FK to deposit_accounts
@@ -227,6 +227,35 @@ CREATE TABLE deposit_interest_accruals (
     FOREIGN KEY (gl_interest_expense_id) REFERENCES gl_accounts(id)
 );
 
+CREATE TABLE advance_deposits (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    customer_id BIGINT UNSIGNED NOT NULL,
+    subledger_type ENUM('DEPOSIT','LOAN','SHARE','INSURANCE','VENDOR','FEE'),
+    reference_id BIGINT UNSIGNED,              -- loan_account_id, customer_insurance_id, etc.
+    amount DECIMAL(18,2) NOT NULL,             -- Original deposited amount
+    balance DECIMAL(18,2) NOT NULL,            -- Remaining balance after deductions
+    deposited_date DATE NOT NULL,
+    status ENUM('ACTIVE','APPLIED','REFUNDED','CLOSED') DEFAULT 'ACTIVE',
+    gl_control_ledger_id BIGINT UNSIGNED NOT NULL,    -- Liability GL account for tracking
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES customers(id),
+    FOREIGN KEY (gl_control_ledger_id) REFERENCES gl_accounts(id)
+);
+
+CREATE TABLE advance_deposit_transactions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    advance_deposit_id BIGINT UNSIGNED NOT NULL,
+    txn_date DATE NOT NULL,
+    description VARCHAR(255),
+    debit DECIMAL(18,2) DEFAULT 0.00,          -- Payment applied/withdrawn
+    credit DECIMAL(18,2) DEFAULT 0.00,         -- Additional top-up
+    balance DECIMAL(18,2) NOT NULL,
+    gl_entry_id BIGINT UNSIGNED NOT NULL,      -- Link to GL journal entry
+    reference_no VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (advance_deposit_id) REFERENCES advance_deposits(id)
+);
 ```
 
 ## ER Diagram

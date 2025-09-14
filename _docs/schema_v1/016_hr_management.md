@@ -7,6 +7,9 @@ This schema covers **employees, attendance, leave management, leave balances, ov
 ## 1. Departments
 
 ```sql
+-- ================================
+-- 1. Departments & Employees
+-- ================================
 CREATE TABLE departments (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(50) NOT NULL,
@@ -28,6 +31,9 @@ CREATE TABLE employees (
     FOREIGN KEY (department_id) REFERENCES departments(id)
 );
 
+-- ================================
+-- 2. Attendance & Leave
+-- ================================
 CREATE TABLE employee_attendances (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     employee_id BIGINT UNSIGNED NOT NULL,
@@ -43,7 +49,7 @@ CREATE TABLE employee_attendances (
 
 CREATE TABLE leave_types (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) NOT NULL,                 -- e.g., Casual, Sick, Annual,
+    name VARCHAR(50) NOT NULL,
     description TEXT,
     max_days_per_year INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -55,8 +61,8 @@ CREATE TABLE employee_leaves (
     leave_type_id BIGINT UNSIGNED NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
-    total_days DECIMAL(5,2) DEFAULT 0.00,       -- Supports partial days
-    leave_hours DECIMAL(5,2) DEFAULT 0.00,      -- For hour-based leave
+    total_days DECIMAL(5,2) DEFAULT 0.00,   -- Supports half days
+    leave_hours DECIMAL(5,2) DEFAULT 0.00,  -- For hour-based leave
     status ENUM('PENDING','APPROVED','REJECTED','CANCELLED') DEFAULT 'PENDING',
     applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     approved_by BIGINT UNSIGNED DEFAULT NULL,
@@ -70,7 +76,7 @@ CREATE TABLE employee_leave_balances (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     employee_id BIGINT UNSIGNED NOT NULL,
     leave_type_id BIGINT UNSIGNED NOT NULL,
-    total_allocated_hours DECIMAL(5,2) DEFAULT 0.00, -- Total leave in hours
+    total_allocated_hours DECIMAL(5,2) DEFAULT 0.00,
     used_hours DECIMAL(5,2) DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (employee_id) REFERENCES employees(id),
@@ -78,6 +84,9 @@ CREATE TABLE employee_leave_balances (
     UNIQUE(employee_id, leave_type_id)
 );
 
+-- ================================
+-- 3. Overtime
+-- ================================
 CREATE TABLE employee_overtime (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     employee_id BIGINT UNSIGNED NOT NULL,
@@ -89,17 +98,22 @@ CREATE TABLE employee_overtime (
     FOREIGN KEY (employee_id) REFERENCES employees(id)
 );
 
+-- ================================
+-- 4. Payroll & Salaries
+-- ================================
 CREATE TABLE employee_salaries (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     employee_id BIGINT UNSIGNED NOT NULL,
     basic_salary DECIMAL(18,2) NOT NULL,
-    allowances JSON DEFAULT NULL,          -- e.g., {"housing": 200, "transport": 50}
-    deductions JSON DEFAULT NULL,          -- e.g., {"tax": 50, "loan": 100}
+    allowances JSON DEFAULT NULL,    -- {"housing":200,"transport":50}
+    deductions JSON DEFAULT NULL,    -- {"tax":50,"loan":100}
     gross_salary DECIMAL(18,2) GENERATED ALWAYS AS (
-        basic_salary + COALESCE(JSON_EXTRACT(allowances, '$'), 0)
+        basic_salary +
+        COALESCE(JSON_EXTRACT(allowances, '$'),0)
     ) STORED,
     net_salary DECIMAL(18,2) GENERATED ALWAYS AS (
-        gross_salary - COALESCE(JSON_EXTRACT(deductions, '$'), 0)
+        gross_salary -
+        COALESCE(JSON_EXTRACT(deductions, '$'),0)
     ) STORED,
     salary_month DATE NOT NULL,
     status ENUM('PENDING','PAID') DEFAULT 'PENDING',
@@ -107,5 +121,58 @@ CREATE TABLE employee_salaries (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (employee_id) REFERENCES employees(id),
     UNIQUE(employee_id, salary_month)
+);
+
+-- ================================
+-- 5. Salary Transactions / Ledger
+-- ================================
+CREATE TABLE employee_salary_transactions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    employee_id BIGINT UNSIGNED NOT NULL,
+    salary_id BIGINT UNSIGNED DEFAULT NULL,   -- Links to monthly salary record
+    transaction_date DATE NOT NULL,
+    description VARCHAR(255),
+    debit DECIMAL(18,2) DEFAULT 0.00,        -- Reductions: deductions, advance settlements
+    credit DECIMAL(18,2) DEFAULT 0.00,       -- Payments/credits: salary, bonuses
+    balance DECIMAL(18,2) DEFAULT 0.00,
+    transaction_type ENUM(
+        'SALARY','ALLOWANCE','DEDUCTION','ADVANCE_SETTLEMENT','BONUS','ADJUSTMENT'
+    ) DEFAULT 'SALARY',
+    reference_no VARCHAR(50),
+    gl_entry_id BIGINT UNSIGNED DEFAULT NULL, -- GL journal entry link
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    FOREIGN KEY (salary_id) REFERENCES employee_salaries(id)
+);
+
+-- ================================
+-- 6. Advance Salaries
+-- ================================
+CREATE TABLE employee_advance_salaries (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    employee_id BIGINT UNSIGNED NOT NULL,
+    advance_date DATE NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
+    balance DECIMAL(18,2) NOT NULL,
+    reason VARCHAR(255),
+    status ENUM('ACTIVE','SETTLED','CANCELLED') DEFAULT 'ACTIVE',
+    gl_account_id BIGINT UNSIGNED NOT NULL,  -- Link to Prepaid Salaries in GL
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id)
+);
+
+CREATE TABLE employee_advance_salary_transactions (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    advance_salary_id BIGINT UNSIGNED NOT NULL,
+    txn_date DATE NOT NULL,
+    description VARCHAR(255),
+    debit DECIMAL(18,2) DEFAULT 0.00,   -- Deduction from balance during payroll
+    credit DECIMAL(18,2) DEFAULT 0.00,  -- Additional top-up
+    balance DECIMAL(18,2) NOT NULL,
+    gl_entry_id BIGINT UNSIGNED NOT NULL,
+    reference_no VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (advance_salary_id) REFERENCES employee_advance_salaries(id)
 );
 ```

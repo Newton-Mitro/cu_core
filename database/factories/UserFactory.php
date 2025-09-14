@@ -31,8 +31,8 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
-            'role' => 'TELLER',
-            'is_active' => true,
+            'status' => $this->faker->randomElement(['ACTIVE', 'INACTIVE', 'SUSPENDED']),
+            'employee_id' => null, // Assign if you have employees
         ];
     }
 

@@ -48,8 +48,8 @@ test('users are rate limited', function () {
             'email' => $user->email,
             'password' => 'wrong-password',
         ])->assertStatus(302)->assertSessionHasErrors([
-            'email' => 'These credentials do not match our records.',
-        ]);
+                    'email' => 'These credentials do not match our records.',
+                ]);
     }
 
     $response = $this->post(route('login.store'), [

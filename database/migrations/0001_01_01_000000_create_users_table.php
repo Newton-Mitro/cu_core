@@ -12,13 +12,13 @@ return new class extends Migration {
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('branch_id')->constrained('branches')->cascadeOnDelete();
+            $table->foreignId('branch_id')->constrained('branches');
             $table->string('name');
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->enum('role', ['TELLER', 'OPS', 'MANAGER', 'ADMIN']);
-            $table->boolean('is_active')->default(true);
+            $table->enum('status', ['ACTIVE', 'INACTIVE', 'SUSPENDED'])->default('ACTIVE');
+            $table->foreignId('employee_id')->nullable()->constrained('employees')->nullOnDelete();
             $table->rememberToken();
             $table->timestamps();
         });

@@ -8,11 +8,14 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::create('branches', function (Blueprint $table) {
-            $table->id(); // BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY
+            $table->id();
             $table->string('code', 20)->unique();
             $table->string('name', 100);
-            $table->string('address', 255)->nullable();
-            $table->timestamps(); // created_at & updated_at with default CURRENT_TIMESTAMP behavior
+            $table->string('address')->nullable();
+            $table->decimal('latitude', 10, 8)->nullable();
+            $table->decimal('longitude', 11, 8)->nullable();
+            $table->foreignId('manager_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamps();
         });
     }
 
