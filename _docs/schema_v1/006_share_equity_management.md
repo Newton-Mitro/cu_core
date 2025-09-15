@@ -1,4 +1,6 @@
 ```sql
+
+
 -- ===============================
 -- Share Policies
 -- ===============================
@@ -25,7 +27,8 @@ CREATE TABLE share_policies (
     gl_share_equity_id BIGINT UNSIGNED DEFAULT NULL,
     gl_dividend_payable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_dividend_expense_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_share_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_fee_income_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_protection_scheme_id BIGINT UNSIGNED DEFAULT NULL,
 
     status ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -33,8 +36,25 @@ CREATE TABLE share_policies (
     FOREIGN KEY (gl_share_equity_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_dividend_payable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_dividend_expense_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_share_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_fee_income_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_protection_scheme_id) REFERENCES gl_accounts(id)
 );
+
+-- ===============================
+-- Share Protection Policy
+-- ===============================
+CREATE TABLE share_protection_policies (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    share_policy_id BIGINT UNSIGNED NOT NULL UNIQUE, -- enforce 1:1
+    monthly_fee DECIMAL(18,2) NOT NULL DEFAULT 10.00,
+    active BOOLEAN DEFAULT TRUE,
+    gl_fee_income_id BIGINT UNSIGNED DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (share_policy_id) REFERENCES share_policies(id) ON DELETE CASCADE,
+    FOREIGN KEY (gl_fee_income_id) REFERENCES gl_accounts(id)
+);
+
 
 -- ===============================
 -- Share Accounts
@@ -54,21 +74,6 @@ CREATE TABLE share_accounts (
 
     FOREIGN KEY (customer_id) REFERENCES customers(id),
     FOREIGN KEY (share_policy_id) REFERENCES share_policies(id)
-);
-
--- ===============================
--- Share Protection Policy
--- ===============================
-CREATE TABLE share_protection_policies (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    share_policy_id BIGINT UNSIGNED NOT NULL,
-    monthly_fee DECIMAL(18,2) NOT NULL DEFAULT 10.00,
-    active BOOLEAN DEFAULT TRUE,
-    gl_share_fee_id BIGINT UNSIGNED DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (share_policy_id) REFERENCES share_policies(id),
-    FOREIGN KEY (gl_share_fee_id) REFERENCES gl_accounts(id)
 );
 
 -- ===============================
@@ -100,42 +105,38 @@ CREATE TABLE share_account_nominees (
 -- ===============================
 -- Share Transactions (Contribution, Dividend, Penalty, Protection Fee)
 -- ===============================
-CREATE TABLE share_transactions (
+CREATE TABLE share_account_transactions (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     share_account_id BIGINT UNSIGNED NOT NULL,
+    gl_share_equity_id BIGINT UNSIGNED DEFAULT NULL,
     txn_date DATE NOT NULL,
     description VARCHAR(255),
     debit DECIMAL(18,2) DEFAULT 0.00,
     credit DECIMAL(18,2) DEFAULT 0.00,
     balance DECIMAL(18,2) DEFAULT 0.00,
     reference_no VARCHAR(50),
-    transaction_type ENUM('CONTRIBUTION','DIVIDEND','PENALTY','PROTECTION_FEE') DEFAULT 'CONTRIBUTION',
-    penalty_applied BOOLEAN DEFAULT FALSE,
-    protection_fee_applied BOOLEAN DEFAULT FALSE,
-    gl_control_account_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_share_fee_id BIGINT UNSIGNED DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    transaction_type ENUM('CONTRIBUTION','WITHDRAWAL','FEE','TRANSFER','PROTECTION_FEE') DEFAULT 'CONTRIBUTION',
 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (share_account_id) REFERENCES share_accounts(id),
-    FOREIGN KEY (gl_control_account_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_share_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_share_equity_id) REFERENCES gl_accounts(id),
 );
 
 -- ===============================
 -- Share Penalties (Late contribution)
 -- ===============================
-CREATE TABLE share_penalties (
+CREATE TABLE share_account_fees (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     share_account_id BIGINT UNSIGNED NOT NULL,
     txn_date DATE NOT NULL,
     description VARCHAR(255),
-    penalty_amount DECIMAL(18,2) NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
     settled BOOLEAN DEFAULT FALSE,
-    gl_share_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_fee_income_id BIGINT UNSIGNED DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (share_account_id) REFERENCES share_accounts(id),
-    FOREIGN KEY (gl_share_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_fee_income_id) REFERENCES gl_accounts(id)
 );
 
 -- ===============================
@@ -144,33 +145,47 @@ CREATE TABLE share_penalties (
 CREATE TABLE share_protection_transactions (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     share_account_id BIGINT UNSIGNED NOT NULL,
-    protection_policy_id BIGINT UNSIGNED NOT NULL,
     txn_date DATE NOT NULL,
-    fee_amount DECIMAL(18,2) NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
     settled BOOLEAN DEFAULT FALSE,
-    gl_share_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_protection_scheme_id BIGINT UNSIGNED DEFAULT NULL,
     description VARCHAR(255) DEFAULT 'Monthly protection fee',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (share_account_id) REFERENCES share_accounts(id),
-    FOREIGN KEY (protection_policy_id) REFERENCES share_protection_policies(id),
-    FOREIGN KEY (gl_share_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_protection_scheme_id) REFERENCES gl_accounts(id)
 );
 
 -- ===============================
 -- Dividend Provisions
 -- ===============================
+CREATE TABLE share_dividend_provision_runs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    run_date DATE NOT NULL,                       -- Date of accrual
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    status ENUM('PENDING','POSTED','CANCELLED') DEFAULT 'PENDING',
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE dividend_provisions (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    provision_run_id BIGINT UNSIGNED NOT NULL,
     share_account_id BIGINT UNSIGNED NOT NULL,
-    provision_date DATE NOT NULL,
-    provision_amount DECIMAL(18,2) NOT NULL,
-    recognized BOOLEAN DEFAULT FALSE,
     gl_dividend_payable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_dividend_expense_id BIGINT UNSIGNED DEFAULT NULL,
+
+    provision_date DATE NOT NULL,
+    provision_amount DECIMAL(18,2) NOT NULL,
+    is_recognized BOOLEAN DEFAULT FALSE,
+    recognized_at TIMESTAMP NULL,
     notes VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    status ENUM('PENDING','POSTED','REVERSED') DEFAULT 'PENDING',
 
+    FOREIGN KEY (provision_run_id) REFERENCES share_dividend_provision_runs(id),
     FOREIGN KEY (share_account_id) REFERENCES share_accounts(id),
     FOREIGN KEY (gl_dividend_payable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_dividend_expense_id) REFERENCES gl_accounts(id)
@@ -197,12 +212,12 @@ erDiagram
     GL_ACCOUNTS ||--o{ SHARE_POLICIES : gl_share_equity_id
     GL_ACCOUNTS ||--o{ SHARE_POLICIES : gl_dividend_payable_id
     GL_ACCOUNTS ||--o{ SHARE_POLICIES : gl_dividend_expense_id
-    GL_ACCOUNTS ||--o{ SHARE_POLICIES : gl_share_fee_id
-    GL_ACCOUNTS ||--o{ SHARE_PENALTIES : gl_share_fee_id
-    GL_ACCOUNTS ||--o{ SHARE_PROTECTION_POLICIES : gl_share_fee_id
-    GL_ACCOUNTS ||--o{ SHARE_TRANSACTIONS : gl_control_account_id
-    GL_ACCOUNTS ||--o{ SHARE_TRANSACTIONS : gl_share_fee_id
-    GL_ACCOUNTS ||--o{ SHARE_PROTECTION_TRANSACTIONS : gl_share_fee_id
+    GL_ACCOUNTS ||--o{ SHARE_POLICIES : gl_fee_income_id
+    GL_ACCOUNTS ||--o{ SHARE_PENALTIES : gl_fee_income_id
+    GL_ACCOUNTS ||--o{ SHARE_PROTECTION_POLICIES : gl_fee_income_id
+    GL_ACCOUNTS ||--o{ SHARE_TRANSACTIONS : gl_share_equity_id
+    GL_ACCOUNTS ||--o{ SHARE_TRANSACTIONS : gl_fee_income_id
+    GL_ACCOUNTS ||--o{ SHARE_PROTECTION_TRANSACTIONS : gl_fee_income_id
     GL_ACCOUNTS ||--o{ DIVIDEND_PROVISIONS : gl_dividend_payable_id
     GL_ACCOUNTS ||--o{ DIVIDEND_PROVISIONS : gl_dividend_expense_id
 ```

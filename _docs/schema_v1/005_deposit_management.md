@@ -6,22 +6,23 @@
 -- ===========================
 CREATE TABLE deposit_policies (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    type ENUM('SAVINGS','FIXED','RECURRING','SPECIAL') NOT NULL,
     code VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(150) NOT NULL,
     description TEXT,
+    type ENUM('SAVINGS','FIXED','RECURRING','SPECIAL') NOT NULL,
 
     -- Opening policy
     requires_kyc BOOLEAN DEFAULT TRUE,
-    initial_fee DECIMAL(18,2) DEFAULT 0.00,
+    min_age INT NOT NULL,
+    max_age INT NOT NULL,
     min_opening_balance DECIMAL(18,2) DEFAULT 0.00,
     min_balance DECIMAL(18,2) DEFAULT 0.00,
 
     -- Fine / late payment policy
-    calculation_method ENUM('FIXED','PERCENTAGE') NOT NULL,
+    fine_calculation_method ENUM('FIXED','PERCENTAGE') NOT NULL,
     fine_rate DECIMAL(5,2) DEFAULT 0.00,
     fine_period_unit ENUM('DAY','MONTH') DEFAULT 'DAY',
-    max_cap DECIMAL(18,2) DEFAULT NULL,
+    max_fine DECIMAL(18,2) DEFAULT NULL,
     apply_on ENUM('PRINCIPAL','INSTALLMENT','TOTAL') DEFAULT 'TOTAL',
 
     -- Dormant account policy
@@ -31,8 +32,6 @@ CREATE TABLE deposit_policies (
     notify_member BOOLEAN DEFAULT TRUE,
 
     -- Installment / deposit policy
-    min_age INT NOT NULL,
-    max_age INT NOT NULL,
     min_installment DECIMAL(18,2) NOT NULL,
     max_installment DECIMAL(18,2) DEFAULT NULL,
     lock_in_period INT DEFAULT NULL,
@@ -58,7 +57,7 @@ CREATE TABLE deposit_policies (
     gl_deposit_payable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_payable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_expense_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_deposit_fee_id BIGINT UNSIGNED DEFAULT NULL,
+    gl_fee_income_id BIGINT UNSIGNED DEFAULT NULL,
 
     status ENUM('ACTIVE','INACTIVE') DEFAULT 'ACTIVE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -67,8 +66,21 @@ CREATE TABLE deposit_policies (
     FOREIGN KEY (gl_deposit_payable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_payable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_expense_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (gl_deposit_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_fee_income_id) REFERENCES gl_accounts(id)
 );
+
+
+CREATE TABLE deposit_fee_rules (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    deposit_policy_id BIGINT UNSIGNED NOT NULL,
+    fee_type ENUM('LOW_BALANCE','WITHDRAWAL','TRANSFER','DORMANCY','OTHERS') NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
+    charge_frequency ENUM('PER_TXN','MONTHLY','ANNUAL','ON_EVENT') NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (deposit_policy_id) REFERENCES deposit_policies(id)
+);
+
 
 CREATE TABLE deposit_policy_tenures (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -155,83 +167,80 @@ CREATE TABLE deposit_account_schedules (
 
 CREATE TABLE deposit_account_transactions (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    gl_deposit_payable_id BIGINT UNSIGNED DEFAULT NULL,
     deposit_account_id BIGINT UNSIGNED NOT NULL,
     related_schedule_id BIGINT UNSIGNED DEFAULT NULL,
+
     txn_date DATE NOT NULL,
     description VARCHAR(255),
     debit DECIMAL(18,2) DEFAULT 0.00,
     credit DECIMAL(18,2) DEFAULT 0.00,
     balance DECIMAL(18,2) DEFAULT 0.00,
     reference_no VARCHAR(50),
-    transaction_type ENUM(
-        'DEPOSIT','WITHDRAWAL','INTEREST','INTEREST_REV','FEE',
-        'PENALTY','TRANSFER_IN','TRANSFER_OUT'
-    ) DEFAULT 'DEPOSIT',
-    reversal_of_txn_id BIGINT UNSIGNED DEFAULT NULL, -- for reversals
-
-    deposit_policy_id BIGINT UNSIGNED DEFAULT NULL,
-    interest_accrual_id BIGINT UNSIGNED DEFAULT NULL,
-    deposit_account_fee_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_control_account_id BIGINT UNSIGNED DEFAULT NULL,
+    transaction_type ENUM('DEPOSIT','WITHDRAWAL','INTEREST','FEE','TRANSFER') DEFAULT 'DEPOSIT',
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id),
-    FOREIGN KEY (deposit_policy_id) REFERENCES deposit_policies(id),
-    FOREIGN KEY (interest_accrual_id) REFERENCES deposit_interest_provisions(id),
     FOREIGN KEY (related_schedule_id) REFERENCES deposit_account_schedules(id),
-    FOREIGN KEY (deposit_account_fee_id) REFERENCES deposit_account_fees(id),
-    FOREIGN KEY (gl_control_account_id) REFERENCES gl_accounts(id),
-    FOREIGN KEY (reversal_of_txn_id) REFERENCES deposit_account_transactions(id)
+    FOREIGN KEY (gl_deposit_payable_id) REFERENCES gl_accounts(id),
+
 );
 
 CREATE TABLE deposit_account_fees (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    gl_fee_income_id BIGINT UNSIGNED DEFAULT NULL,
     deposit_account_id BIGINT UNSIGNED NOT NULL,
     related_schedule_id BIGINT UNSIGNED DEFAULT NULL,
-    deposit_policy_id BIGINT UNSIGNED DEFAULT NULL,
+
     txn_date DATE NOT NULL,
     description VARCHAR(255),
     fee_type ENUM(
         'LATE_PAYMENT',     -- Fee for late recurring deposit
         'INACTIVITY',       -- Fee for dormant/inactive account
         'MAINTENANCE',      -- annual account maintenance fee  ??? From Account
-        -- 'CLOSURE',          -- Fee for premature or regular closure
-        -- 'TRANSFER',         -- Fee for account-to-account transfer
+        'CLOSURE',          -- Fee for premature or regular closure
+        'TRANSFER',         -- Fee for account-to-account transfer
         'OTHER'             -- Any miscellaneous fee
     ) DEFAULT 'LATE_PAYMENT',
-    penalty_amount DECIMAL(18,2) NOT NULL,
+    amount DECIMAL(18,2) NOT NULL,
     settled BOOLEAN DEFAULT FALSE,
-    interest_accrual_id BIGINT UNSIGNED DEFAULT NULL,
-    gl_deposit_fee_id BIGINT UNSIGNED DEFAULT NULL,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id),
     FOREIGN KEY (related_schedule_id) REFERENCES deposit_account_schedules(id),
-    FOREIGN KEY (deposit_policy_id) REFERENCES deposit_policies(id),
-    FOREIGN KEY (interest_accrual_id) REFERENCES deposit_interest_provisions(id),
-    FOREIGN KEY (gl_deposit_fee_id) REFERENCES gl_accounts(id)
+    FOREIGN KEY (gl_fee_income_id) REFERENCES gl_accounts(id)
+);
+
+CREATE TABLE deposit_interest_provision_runs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    run_date DATE NOT NULL,                       -- Date of accrual
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    status ENUM('PENDING','POSTED','CANCELLED') DEFAULT 'PENDING',
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE deposit_interest_provisions (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    provision_run_id BIGINT UNSIGNED NOT NULL,
     deposit_account_id BIGINT UNSIGNED NOT NULL,
-    deposit_policy_id BIGINT UNSIGNED NOT NULL,
-    tenure_id BIGINT UNSIGNED DEFAULT NULL,
-    provision_date DATE NOT NULL,
-    provision_amount DECIMAL(18,2) NOT NULL,
-    eligible BOOLEAN DEFAULT TRUE,
-    recognized BOOLEAN DEFAULT FALSE,
-    provision_type ENUM('REGULAR','BONUS','ADJUSTMENT') DEFAULT 'REGULAR',
     gl_interest_payable_id BIGINT UNSIGNED DEFAULT NULL,
     gl_interest_expense_id BIGINT UNSIGNED DEFAULT NULL,
+
+    provision_date DATE NOT NULL,
+    accrued_interest DECIMAL(18,2) NOT NULL,
+    eligible BOOLEAN DEFAULT TRUE,
+    recognized BOOLEAN DEFAULT FALSE,
+    status ENUM('PENDING','POSTED','REVERSED') DEFAULT 'PENDING',
     notes VARCHAR(255),
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (deposit_account_id) REFERENCES deposit_accounts(id),
-    FOREIGN KEY (deposit_policy_id) REFERENCES deposit_policies(id),
-    FOREIGN KEY (tenure_id) REFERENCES deposit_policy_tenures(id),
+    FOREIGN KEY (provision_run_id) REFERENCES interest_provision_runs(id),
+    FOREIGN KEY (deposit_account_id) REFERENCES deposit_interest_provision_runs(id),
     FOREIGN KEY (gl_interest_payable_id) REFERENCES gl_accounts(id),
     FOREIGN KEY (gl_interest_expense_id) REFERENCES gl_accounts(id)
 );
